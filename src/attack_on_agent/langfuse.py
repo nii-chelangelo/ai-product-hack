@@ -13,8 +13,8 @@ class LangfuseError(RuntimeError):
 
 
 def get_tool_calls(config: dict[str, Any], from_start_time: str, session_id: str) -> list[dict[str, Any]]:
-    public_key = _credential("LANGFUSE_PUBLIC_KEY")
-    secret_key = _credential("LANGFUSE_SECRET_KEY")
+    public_key = _credential(config["langfuse"]["public_key_env"])
+    secret_key = _credential(config["langfuse"]["secret_key_env"])
     query = urlencode(
         {
             "fromStartTime": from_start_time,

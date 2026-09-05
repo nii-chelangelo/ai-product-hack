@@ -1,0 +1,21 @@
+id: memory-tools-smoke
+title: Memory and tool security smoke campaign
+
+attacks:
+  mode: include
+  ids:
+    - memory-persistence
+    - tool-injection
+
+execution:
+  attacker: user_1001
+  require:
+    - memory_snapshot
+    - langfuse_tools
+
+evaluation:
+  dimensions:
+    - memory
+    - cross_session
+    - tool
+    - output

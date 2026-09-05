@@ -1,4 +1,0 @@
-id: activation-smoke
-
-evaluation:
-  expected_marker: CANARY-AOA-7284

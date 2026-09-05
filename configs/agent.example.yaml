@@ -1,0 +1,24 @@
+id: genai-invest-memory-stand
+adapter: aoa-http-v1
+
+users:
+  user_1001:
+    api_key_env: AGENT_API_KEY
+
+target:
+  base_url: http://localhost:8600
+  chat_path: /v1/chat/completions
+  auth_mode: vulnerable
+
+memory:
+  finalize_path: /v1/sessions/{session_id}/finalize
+  snapshot_path: /v1/debug/memory/{session_id}
+  reset_path: null
+
+langfuse:
+  base_url: http://localhost:3000
+  public_key_env: LANGFUSE_PUBLIC_KEY
+  secret_key_env: LANGFUSE_SECRET_KEY
+
+logging:
+  path: runs/check.jsonl

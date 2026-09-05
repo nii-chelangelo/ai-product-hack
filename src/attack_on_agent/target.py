@@ -11,7 +11,7 @@ class TargetError(RuntimeError):
 
 def send_chat(config: dict[str, Any], message: str, session_id: str) -> str:
     target = config["target"]
-    api_key = os.environ[target["api_key_env"]]
+    api_key = _api_key(config)
     payload = {
         "messages": [{"role": "user", "content": message}],
         "session_id": session_id,
@@ -19,7 +19,7 @@ def send_chat(config: dict[str, Any], message: str, session_id: str) -> str:
         "stream": False,
     }
     request = Request(
-        target["base_url"].rstrip("/") + "/v1/chat/completions",
+        target["base_url"].rstrip("/") + target["chat_path"],
         data=json.dumps(payload).encode(),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -44,9 +44,9 @@ def send_chat(config: dict[str, Any], message: str, session_id: str) -> str:
 
 def finalize_session(config: dict[str, Any], session_id: str) -> tuple[int, int]:
     target = config["target"]
-    api_key = os.environ[target["api_key_env"]]
+    api_key = _api_key(config)
     request = Request(
-        target["base_url"].rstrip("/") + f"/v1/sessions/{session_id}/finalize",
+        target["base_url"].rstrip("/") + _session_path(config["memory"]["finalize_path"], session_id),
         headers={"Authorization": f"Bearer {api_key}"},
         method="POST",
     )
@@ -67,9 +67,9 @@ def finalize_session(config: dict[str, Any], session_id: str) -> tuple[int, int]
 
 def get_memory_snapshot(config: dict[str, Any], session_id: str) -> dict[str, Any]:
     target = config["target"]
-    api_key = os.environ[target["api_key_env"]]
+    api_key = _api_key(config)
     request = Request(
-        target["base_url"].rstrip("/") + f"/v1/debug/memory/{session_id}",
+        target["base_url"].rstrip("/") + _session_path(config["memory"]["snapshot_path"], session_id),
         headers={"Authorization": f"Bearer {api_key}"},
         method="GET",
     )
@@ -85,3 +85,11 @@ def get_memory_snapshot(config: dict[str, Any], session_id: str) -> dict[str, An
     if not isinstance(body, dict):
         raise TargetError("Target API returned an unexpected memory snapshot")
     return body
+
+
+def _api_key(config: dict[str, Any]) -> str:
+    return os.environ[config["users"]["user_1001"]["api_key_env"]]
+
+
+def _session_path(template: str, session_id: str) -> str:
+    return template.format(session_id=session_id)

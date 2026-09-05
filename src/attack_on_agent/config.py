@@ -12,45 +12,29 @@ class ConfigError(ValueError):
 def load_config(path: Path) -> dict[str, Any]:
     data = _load_yaml_mapping(path)
 
+    _required_value(data, "id", "config")
+    _required_value(data, "adapter", "config")
+    users = _section(data, "users")
+    default_user = _section(users, "user_1001")
     target = _section(data, "target")
+    memory = _section(data, "memory")
     langfuse = _section(data, "langfuse")
     logging = _section(data, "logging")
 
     _required_url(target, "base_url", "target")
-    api_key_env = _required_value(target, "api_key_env", "target")
+    _required_path(target, "chat_path", "target")
+    api_key_env = _required_value(default_user, "api_key_env", "users.user_1001")
     if not os.environ.get(api_key_env):
         raise ConfigError(f"Environment variable '{api_key_env}' must be set")
     auth_mode = _required_value(target, "auth_mode", "target")
     if auth_mode not in {"vulnerable", "protected"}:
         raise ConfigError("'target.auth_mode' must be 'vulnerable' or 'protected'")
+    _required_path(memory, "finalize_path", "memory")
+    _required_path(memory, "snapshot_path", "memory")
     _required_url(langfuse, "base_url", "langfuse")
+    _required_value(langfuse, "public_key_env", "langfuse")
+    _required_value(langfuse, "secret_key_env", "langfuse")
     _required_value(logging, "path", "logging")
-    return data
-
-
-def load_campaign(path: Path) -> dict[str, Any]:
-    data = _load_yaml_mapping(path)
-    evaluation = _section(data, "evaluation")
-    _required_value(evaluation, "expected_marker", "evaluation")
-    return data
-
-
-def load_impact_campaign(path: Path) -> dict[str, Any]:
-    data = _load_yaml_mapping(path)
-    _required_value(data, "id", "campaign")
-    _required_value(data, "title", "campaign")
-    _required_value(data, "attack_class", "campaign")
-    coverage = data.get("coverage")
-    if not isinstance(coverage, list) or not all(isinstance(item, str) and item for item in coverage):
-        raise ConfigError("'campaign.coverage' must be a non-empty list of strings")
-    impact = _section(data, "impact")
-    tool = _section(impact, "tool")
-    _required_value(impact, "expected_marker", "impact")
-    denied_markers = impact.get("denied_markers")
-    if not isinstance(denied_markers, list) or not all(isinstance(marker, str) and marker for marker in denied_markers):
-        raise ConfigError("'impact.denied_markers' must be a non-empty list of strings")
-    _required_value(tool, "name", "impact.tool")
-    _required_value(tool, "expected_cus", "impact.tool")
     return data
 
 
@@ -86,3 +70,10 @@ def _required_url(section: dict[str, Any], name: str, section_name: str) -> str:
     if not value.startswith(("http://", "https://")):
         raise ConfigError(f"'{section_name}.{name}' must start with http:// or https://")
     return value.rstrip("/")
+
+
+def _required_path(section: dict[str, Any], name: str, section_name: str) -> str:
+    value = _required_value(section, name, section_name)
+    if not value.startswith("/"):
+        raise ConfigError(f"'{section_name}.{name}' must start with /")
+    return value

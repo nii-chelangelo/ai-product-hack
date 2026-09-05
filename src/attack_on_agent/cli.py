@@ -4,14 +4,12 @@ from pathlib import Path
 
 from loguru import logger
 
-from attack_on_agent.config import ConfigError, load_campaign, load_config, load_impact_campaign
+from attack_on_agent.config import ConfigError, load_config
 from attack_on_agent.healthcheck import check_services
 from attack_on_agent.logging import configure
-from attack_on_agent.evaluator import evaluate_activation, evaluate_impact, evaluate_persistence
-from attack_on_agent.campaign_report import generate_campaign_report
+from attack_on_agent.evaluator import evaluate_persistence
 from attack_on_agent.langfuse import LangfuseError, get_tool_calls
-from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_evaluation, get_snapshot, get_status, get_tool_calls_from_step, mark_unknown, save_diff, save_evaluation, start_step
-from attack_on_agent.scenario import evaluate_scenario
+from attack_on_agent.run_store import RunError, complete_step, get_diff, get_snapshot, get_status, mark_unknown, save_diff, save_evaluation, start_step
 from attack_on_agent.state_diff import diff_snapshots, diff_summary
 from attack_on_agent.target import TargetError, finalize_session, get_memory_snapshot, send_chat
 
@@ -48,25 +46,11 @@ def main() -> None:
     persistence_parser.add_argument("--before-step", required=True, help="Snapshot step before the source session")
     persistence_parser.add_argument("--after-step", required=True, help="Snapshot step after finalization")
     persistence_parser.add_argument("--source-session-id", required=True, help="Session that should have persisted")
-    activation_parser = subparsers.add_parser("evaluate-activation", help="Evaluate cross-session memory activation")
-    activation_parser.add_argument("--run-id", required=True, help="Run identifier")
-    activation_parser.add_argument("--trigger-step", required=True, help="Completed chat step in a new session")
-    activation_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with activation marker")
     tool_parser = subparsers.add_parser("collect-tool-evidence", help="Save Langfuse tool-call evidence for one session")
     tool_parser.add_argument("--config", type=Path, required=True, help="Path to local YAML configuration")
     tool_parser.add_argument("--run-id", required=True, help="Run identifier for checkpoints")
     tool_parser.add_argument("--step-id", required=True, help="Unique step identifier within the run")
     tool_parser.add_argument("--session-id", required=True, help="Target session identifier")
-    impact_parser = subparsers.add_parser("evaluate-impact", help="Evaluate output and tool impact")
-    impact_parser.add_argument("--run-id", required=True, help="Run identifier")
-    impact_parser.add_argument("--response-step", required=True, help="Completed chat step with the target response")
-    impact_parser.add_argument("--tool-evidence-step", required=True, help="Completed tool-evidence step")
-    impact_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with impact criteria")
-    scenario_parser = subparsers.add_parser("evaluate-scenario", help="Assign a final verdict to one completed scenario")
-    scenario_parser.add_argument("--run-id", required=True, help="Run identifier")
-    scenario_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign definition")
-    campaign_report_parser = subparsers.add_parser("campaign-report", help="Generate an ASR report for one campaign")
-    campaign_report_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign definition")
     args = parser.parse_args()
 
     if args.command == "status":
@@ -97,58 +81,6 @@ def main() -> None:
             save_evaluation(args.run_id, "persistence", result)
             print(json.dumps(result, ensure_ascii=False, indent=2))
         except RunError as error:
-            parser.error(str(error))
-        return
-
-    if args.command == "evaluate-activation":
-        try:
-            campaign = load_campaign(args.campaign)
-            result = evaluate_activation(
-                get_chat_response(args.run_id, args.trigger_step),
-                campaign["evaluation"]["expected_marker"],
-            )
-            save_evaluation(args.run_id, "activation", result)
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        except (ConfigError, RunError) as error:
-            parser.error(str(error))
-        return
-
-    if args.command == "evaluate-impact":
-        try:
-            campaign = load_impact_campaign(args.campaign)
-            impact = campaign["impact"]
-            result = evaluate_impact(
-                get_chat_response(args.run_id, args.response_step),
-                get_tool_calls_from_step(args.run_id, args.tool_evidence_step),
-                impact["expected_marker"],
-                impact["tool"]["name"],
-                impact["tool"]["expected_cus"],
-                impact["denied_markers"],
-            )
-            save_evaluation(args.run_id, "impact", result)
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        except (ConfigError, RunError) as error:
-            parser.error(str(error))
-        return
-
-    if args.command == "evaluate-scenario":
-        try:
-            campaign = load_impact_campaign(args.campaign)
-            result = evaluate_scenario(
-                campaign,
-                get_status(args.run_id),
-                get_evaluation(args.run_id, "impact"),
-            )
-            save_evaluation(args.run_id, "scenario", result)
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        except (ConfigError, RunError) as error:
-            parser.error(str(error))
-        return
-
-    if args.command == "campaign-report":
-        try:
-            print(generate_campaign_report(load_impact_campaign(args.campaign)))
-        except (ConfigError, RunError) as error:
             parser.error(str(error))
         return
 
