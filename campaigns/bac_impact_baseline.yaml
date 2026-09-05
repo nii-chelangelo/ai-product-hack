@@ -1,4 +1,9 @@
 id: bac-impact-baseline
+title: Synthetic cross-user BAC baseline
+attack_class: cross-user-data-leakage
+coverage:
+  - output
+  - tool
 
 impact:
   expected_marker: Петрова Мария Сергеевна

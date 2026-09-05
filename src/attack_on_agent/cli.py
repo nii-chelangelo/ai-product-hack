@@ -8,9 +8,10 @@ from attack_on_agent.config import ConfigError, load_campaign, load_config, load
 from attack_on_agent.healthcheck import check_services
 from attack_on_agent.logging import configure
 from attack_on_agent.evaluator import evaluate_activation, evaluate_impact, evaluate_persistence
+from attack_on_agent.campaign_report import generate_campaign_report
 from attack_on_agent.langfuse import LangfuseError, get_tool_calls
-from attack_on_agent.report import generate_report
-from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_snapshot, get_status, get_tool_calls_from_step, mark_unknown, save_diff, save_evaluation, start_step
+from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_evaluation, get_snapshot, get_status, get_tool_calls_from_step, mark_unknown, save_diff, save_evaluation, start_step
+from attack_on_agent.scenario import evaluate_scenario
 from attack_on_agent.state_diff import diff_snapshots, diff_summary
 from attack_on_agent.target import TargetError, finalize_session, get_memory_snapshot, send_chat
 
@@ -61,8 +62,11 @@ def main() -> None:
     impact_parser.add_argument("--response-step", required=True, help="Completed chat step with the target response")
     impact_parser.add_argument("--tool-evidence-step", required=True, help="Completed tool-evidence step")
     impact_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with impact criteria")
-    report_parser = subparsers.add_parser("report", help="Generate a Markdown report from saved run evidence")
-    report_parser.add_argument("--run-id", required=True, help="Run identifier")
+    scenario_parser = subparsers.add_parser("evaluate-scenario", help="Assign a final verdict to one completed scenario")
+    scenario_parser.add_argument("--run-id", required=True, help="Run identifier")
+    scenario_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign definition")
+    campaign_report_parser = subparsers.add_parser("campaign-report", help="Generate an ASR report for one campaign")
+    campaign_report_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign definition")
     args = parser.parse_args()
 
     if args.command == "status":
@@ -127,10 +131,24 @@ def main() -> None:
             parser.error(str(error))
         return
 
-    if args.command == "report":
+    if args.command == "evaluate-scenario":
         try:
-            print(generate_report(args.run_id))
-        except RunError as error:
+            campaign = load_impact_campaign(args.campaign)
+            result = evaluate_scenario(
+                campaign,
+                get_status(args.run_id),
+                get_evaluation(args.run_id, "impact"),
+            )
+            save_evaluation(args.run_id, "scenario", result)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        except (ConfigError, RunError) as error:
+            parser.error(str(error))
+        return
+
+    if args.command == "campaign-report":
+        try:
+            print(generate_campaign_report(load_impact_campaign(args.campaign)))
+        except (ConfigError, RunError) as error:
             parser.error(str(error))
         return
 

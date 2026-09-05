@@ -15,6 +15,7 @@ dist/
 # Local configuration and run artefacts
 configs/local.yaml
 runs/
+reports/
 
 # Tool caches and editor files
 .pytest_cache/

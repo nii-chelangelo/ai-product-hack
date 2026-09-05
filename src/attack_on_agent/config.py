@@ -37,6 +37,12 @@ def load_campaign(path: Path) -> dict[str, Any]:
 
 def load_impact_campaign(path: Path) -> dict[str, Any]:
     data = _load_yaml_mapping(path)
+    _required_value(data, "id", "campaign")
+    _required_value(data, "title", "campaign")
+    _required_value(data, "attack_class", "campaign")
+    coverage = data.get("coverage")
+    if not isinstance(coverage, list) or not all(isinstance(item, str) and item for item in coverage):
+        raise ConfigError("'campaign.coverage' must be a non-empty list of strings")
     impact = _section(data, "impact")
     tool = _section(impact, "tool")
     _required_value(impact, "expected_marker", "impact")

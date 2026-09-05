@@ -117,6 +117,18 @@ def get_tool_calls_from_step(run_id: str, step_id: str) -> list[dict[str, Any]]:
     raise RunError(f"Tool evidence for step '{step_id}' is missing")
 
 
+def get_evaluation(run_id: str, name: str) -> dict[str, Any] | None:
+    run_dir = _run_dir(run_id)
+    _load_existing_state(run_dir, run_id)
+    path = run_dir / "evaluations" / f"{name}.json"
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text())
+    if not isinstance(payload, dict):
+        raise RunError(f"Evaluation '{name}' is invalid")
+    return payload
+
+
 def save_diff(run_id: str, before_step: str, after_step: str, diff: dict[str, Any]) -> None:
     run_dir = _run_dir(run_id)
     _load_existing_state(run_dir, run_id)
