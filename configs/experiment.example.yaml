@@ -1,7 +1,6 @@
-run_id: controlled-memory-canary
+run_id: llamator-run
 target: agent.yaml
 campaign: attacks.yaml
 judge: null
 users:
   attacker: user_1001
-  verifier: user_1001

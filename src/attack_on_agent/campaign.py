@@ -19,43 +19,41 @@ def load_campaign(path: Path) -> dict[str, Any]:
 
     if not isinstance(campaign, dict):
         raise CampaignError("Campaign must be a YAML mapping")
-    _string(campaign, "id", "campaign")
-    _string(campaign, "title", "campaign")
-    attacks = campaign.get("attacks")
-    if not isinstance(attacks, list) or not attacks:
-        raise CampaignError("'attacks' must be a non-empty YAML list")
-    for attack in attacks:
-        _validate_attack(attack)
+    _validate_llamator(campaign)
+    tests = campaign.get("tests")
+    if not isinstance(tests, list) or not tests:
+        raise CampaignError("'tests' must be a non-empty YAML list")
+    test_ids: set[str] = set()
+    for test in tests:
+        _validate_test(test)
+        if test["id"] in test_ids:
+            raise CampaignError("Each LLAMATOR test ID must be unique within a campaign")
+        test_ids.add(test["id"])
     return campaign
 
 
-def _validate_attack(attack: Any) -> None:
-    if not isinstance(attack, dict):
-        raise CampaignError("Each attack must be a YAML mapping")
-    attack_id = _string(attack, "id", "attack")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", attack_id):
-        raise CampaignError("attack.id must contain only letters, numbers, underscores, or hyphens")
-    _validate_phase(attack, "delivery")
-    _validate_phase(attack, "activation")
-    markers = attack.get("markers")
-    if not isinstance(markers, list) or not markers or not all(isinstance(marker, str) and marker for marker in markers):
-        raise CampaignError(f"attack '{attack['id']}' must have a non-empty 'markers' list")
-    evaluation = attack.get("evaluation")
-    if not isinstance(evaluation, dict):
-        raise CampaignError(f"attack '{attack['id']}.evaluation' must be a YAML mapping")
-    dimensions = evaluation.get("dimensions")
-    allowed = {"memory", "cross_session", "tool", "output"}
-    if not isinstance(dimensions, list) or not dimensions or not set(dimensions) <= allowed:
-        raise CampaignError(f"attack '{attack['id']}.evaluation.dimensions' must contain supported dimensions")
+def _validate_llamator(campaign: dict[str, Any]) -> None:
+    source = campaign.get("llamator")
+    if not isinstance(source, dict):
+        raise CampaignError("'llamator' must be a YAML mapping")
+    attacker = source.get("attacker")
+    if not isinstance(attacker, dict):
+        raise CampaignError("'llamator.attacker' must be a YAML mapping")
+    for name in ("model", "api_key_env", "base_url_env"):
+        value = attacker.get(name)
+        if not isinstance(value, str) or not value:
+            raise CampaignError(f"'llamator.attacker.{name}' must be a non-empty string")
 
 
-def _validate_phase(attack: dict[str, Any], name: str) -> None:
-    phase = attack.get(name)
-    if not isinstance(phase, dict):
-        raise CampaignError(f"attack '{attack['id']}.{name}' must be a YAML mapping")
-    messages = phase.get("messages")
-    if not isinstance(messages, list) or not messages or not all(isinstance(message, str) and message for message in messages):
-        raise CampaignError(f"attack '{attack['id']}.{name}.messages' must be a non-empty string list")
+def _validate_test(test: Any) -> None:
+    if not isinstance(test, dict):
+        raise CampaignError("Each test must be a YAML mapping")
+    test_id = _string(test, "id", "test")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", test_id):
+        raise CampaignError("test.id must contain only letters, numbers, underscores, or hyphens")
+    params = test.get("params", {})
+    if not isinstance(params, dict):
+        raise CampaignError("'test.params' must be a YAML mapping")
 
 
 def _string(data: dict[str, Any], name: str, scope: str) -> str:

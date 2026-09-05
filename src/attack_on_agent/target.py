@@ -10,10 +10,14 @@ class TargetError(RuntimeError):
 
 
 def send_chat(config: dict[str, Any], user_id: str, message: str, session_id: str) -> str:
+    return send_messages(config, user_id, [{"role": "user", "content": message}], session_id)
+
+
+def send_messages(config: dict[str, Any], user_id: str, messages: list[dict[str, str]], session_id: str) -> str:
     target = config["target"]
     api_key = _api_key(config, user_id)
     payload = {
-        "messages": [{"role": "user", "content": message}],
+        "messages": messages,
         "session_id": session_id,
         "auth_mode": target["auth_mode"],
         "stream": False,
@@ -84,7 +88,7 @@ def get_memory_snapshot(config: dict[str, Any], user_id: str, session_id: str) -
 
     if not isinstance(body, dict):
         raise TargetError("Target API returned an unexpected memory snapshot")
-    return body
+    return _evidence_snapshot(body)
 
 
 def _api_key(config: dict[str, Any], user_id: str) -> str:
@@ -97,3 +101,21 @@ def _api_key(config: dict[str, Any], user_id: str) -> str:
 
 def _session_path(template: str, session_id: str) -> str:
     return template.format(session_id=session_id)
+
+
+def _evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Keep memory evidence while leaving raw chat trajectories in Langfuse."""
+    working_memory = snapshot.get("working_memory")
+    if isinstance(working_memory, dict):
+        messages = working_memory.pop("messages", [])
+        if isinstance(messages, list):
+            working_memory["message_count"] = len(messages)
+    sessions = snapshot.get("dialog_sessions")
+    if isinstance(sessions, list):
+        for session in sessions:
+            if not isinstance(session, dict):
+                continue
+            messages = session.pop("messages", [])
+            if isinstance(messages, list):
+                session["message_count"] = len(messages)
+    return snapshot

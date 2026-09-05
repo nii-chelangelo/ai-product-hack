@@ -3,7 +3,7 @@ adapter: aoa-http-v1
 
 users:
   user_1001:
-    api_key_env: AGENT_API_KEY
+    api_key_env: AGENT_API_KEY_ATTACKER
 
 target:
   base_url: http://localhost:8600

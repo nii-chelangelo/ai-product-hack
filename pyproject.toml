@@ -5,6 +5,7 @@ description = "Defensive-security pipeline for stateful AI-agent testing"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "llamator==3.5.0",
     "loguru>=0.7.3",
     "pyyaml>=6.0.2",
 ]

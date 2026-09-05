@@ -32,7 +32,7 @@ def load_experiment(path: Path) -> dict[str, Path | str | None]:
         raise ExperimentError("'judge' must be a path or null")
     result["judge"] = base / judge if judge else None
     users = data.get("users")
-    if not isinstance(users, dict) or not all(isinstance(users.get(role), str) and users[role] for role in ("attacker", "verifier")):
-        raise ExperimentError("'users' must define non-empty 'attacker' and 'verifier'")
+    if not isinstance(users, dict) or not isinstance(users.get("attacker"), str) or not users["attacker"]:
+        raise ExperimentError("'users' must define a non-empty 'attacker'")
     result["users"] = users
     return result

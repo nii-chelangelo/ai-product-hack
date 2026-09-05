@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from time import sleep
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -43,21 +44,13 @@ def get_trajectory_references(config: dict[str, Any], from_start_time: str, sess
     return sorted(references, key=lambda item: item["started_at"] or "")
 
 
-def find_markers_in_session(
-    config: dict[str, Any], from_start_time: str, session_id: str, markers: list[str]
-) -> dict[str, Any]:
-    """Find markers in Langfuse I/O without storing the conversation in a run."""
-    matches: list[dict[str, Any]] = []
-    observations = 0
-    for item in _get_observations(config, from_start_time):
-        if item.get("sessionId") != session_id or item.get("type") != "AGENT":
-            continue
-        observations += 1
-        text = json.dumps({"input": _json_value(item.get("input")), "output": _json_value(item.get("output"))}, ensure_ascii=False)
-        found = [marker for marker in markers if marker in text]
-        if found:
-            matches.append({"observation_id": item.get("id"), "trace_id": item.get("traceId"), "markers": found})
-    return {"observations": observations, "matches": matches}
+def wait_for_trajectory_references(config: dict[str, Any], from_start_time: str, session_id: str) -> list[dict[str, str | None]]:
+    for attempt in range(5):
+        references = get_trajectory_references(config, from_start_time, session_id)
+        if references or attempt == 4:
+            return references
+        sleep(1)
+    return []
 
 
 def get_session_io(config: dict[str, Any], from_start_time: str, session_id: str) -> list[dict[str, Any]]:

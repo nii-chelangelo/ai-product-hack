@@ -15,6 +15,9 @@ dist/
 # Local configuration and run artefacts
 configs/local.yaml
 configs/agent.yaml
+configs/attacks.yaml
+configs/experiment.yaml
+configs/judge.yaml
 runs/
 reports/
 
