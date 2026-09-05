@@ -8,6 +8,7 @@ from attack_on_agent.config import ConfigError, load_campaign, load_config
 from attack_on_agent.healthcheck import check_services
 from attack_on_agent.logging import configure
 from attack_on_agent.evaluator import evaluate_activation, evaluate_persistence
+from attack_on_agent.report import generate_report
 from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_snapshot, get_status, mark_unknown, save_diff, save_evaluation, start_step
 from attack_on_agent.state_diff import diff_snapshots, diff_summary
 from attack_on_agent.target import TargetError, finalize_session, get_memory_snapshot, send_chat
@@ -49,6 +50,8 @@ def main() -> None:
     activation_parser.add_argument("--run-id", required=True, help="Run identifier")
     activation_parser.add_argument("--trigger-step", required=True, help="Completed chat step in a new session")
     activation_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with activation marker")
+    report_parser = subparsers.add_parser("report", help="Generate a Markdown report from saved run evidence")
+    report_parser.add_argument("--run-id", required=True, help="Run identifier")
     args = parser.parse_args()
 
     if args.command == "status":
@@ -92,6 +95,13 @@ def main() -> None:
             save_evaluation(args.run_id, "activation", result)
             print(json.dumps(result, ensure_ascii=False, indent=2))
         except (ConfigError, RunError) as error:
+            parser.error(str(error))
+        return
+
+    if args.command == "report":
+        try:
+            print(generate_report(args.run_id))
+        except RunError as error:
             parser.error(str(error))
         return
 
