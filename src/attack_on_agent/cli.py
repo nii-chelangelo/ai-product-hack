@@ -4,12 +4,13 @@ from pathlib import Path
 
 from loguru import logger
 
-from attack_on_agent.config import ConfigError, load_campaign, load_config
+from attack_on_agent.config import ConfigError, load_campaign, load_config, load_impact_campaign
 from attack_on_agent.healthcheck import check_services
 from attack_on_agent.logging import configure
-from attack_on_agent.evaluator import evaluate_activation, evaluate_persistence
+from attack_on_agent.evaluator import evaluate_activation, evaluate_impact, evaluate_persistence
+from attack_on_agent.langfuse import LangfuseError, get_tool_calls
 from attack_on_agent.report import generate_report
-from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_snapshot, get_status, mark_unknown, save_diff, save_evaluation, start_step
+from attack_on_agent.run_store import RunError, complete_step, get_chat_response, get_diff, get_snapshot, get_status, get_tool_calls_from_step, mark_unknown, save_diff, save_evaluation, start_step
 from attack_on_agent.state_diff import diff_snapshots, diff_summary
 from attack_on_agent.target import TargetError, finalize_session, get_memory_snapshot, send_chat
 
@@ -50,6 +51,16 @@ def main() -> None:
     activation_parser.add_argument("--run-id", required=True, help="Run identifier")
     activation_parser.add_argument("--trigger-step", required=True, help="Completed chat step in a new session")
     activation_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with activation marker")
+    tool_parser = subparsers.add_parser("collect-tool-evidence", help="Save Langfuse tool-call evidence for one session")
+    tool_parser.add_argument("--config", type=Path, required=True, help="Path to local YAML configuration")
+    tool_parser.add_argument("--run-id", required=True, help="Run identifier for checkpoints")
+    tool_parser.add_argument("--step-id", required=True, help="Unique step identifier within the run")
+    tool_parser.add_argument("--session-id", required=True, help="Target session identifier")
+    impact_parser = subparsers.add_parser("evaluate-impact", help="Evaluate output and tool impact")
+    impact_parser.add_argument("--run-id", required=True, help="Run identifier")
+    impact_parser.add_argument("--response-step", required=True, help="Completed chat step with the target response")
+    impact_parser.add_argument("--tool-evidence-step", required=True, help="Completed tool-evidence step")
+    impact_parser.add_argument("--campaign", type=Path, required=True, help="YAML campaign with impact criteria")
     report_parser = subparsers.add_parser("report", help="Generate a Markdown report from saved run evidence")
     report_parser.add_argument("--run-id", required=True, help="Run identifier")
     args = parser.parse_args()
@@ -98,6 +109,24 @@ def main() -> None:
             parser.error(str(error))
         return
 
+    if args.command == "evaluate-impact":
+        try:
+            campaign = load_impact_campaign(args.campaign)
+            impact = campaign["impact"]
+            result = evaluate_impact(
+                get_chat_response(args.run_id, args.response_step),
+                get_tool_calls_from_step(args.run_id, args.tool_evidence_step),
+                impact["expected_marker"],
+                impact["tool"]["name"],
+                impact["tool"]["expected_cus"],
+                impact["denied_markers"],
+            )
+            save_evaluation(args.run_id, "impact", result)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        except (ConfigError, RunError) as error:
+            parser.error(str(error))
+        return
+
     if args.command == "report":
         try:
             print(generate_report(args.run_id))
@@ -137,6 +166,12 @@ def main() -> None:
             print(f"episodes={episodes} facts={facts}")
             return
 
+        if operation == "collect-tool-evidence":
+            tool_calls = get_tool_calls(config, get_status(args.run_id)["created_at"], args.session_id)
+            complete_step(args.run_id, args.step_id, {"tool_calls": tool_calls})
+            print(f"tool_calls={len(tool_calls)}")
+            return
+
         if operation == "snapshot":
             logger.info("Saving memory snapshot: run_id={}, step_id={}, session_id={}", args.run_id, args.step_id, args.session_id)
             snapshot = get_memory_snapshot(config, args.session_id)
@@ -148,7 +183,7 @@ def main() -> None:
         logger.info("Sending chat request: run_id={}, step_id={}, session_id={}, auth_mode={}", args.run_id, args.step_id, args.session_id, config["target"]["auth_mode"])
         response = send_chat(config, args.message, args.session_id)
         complete_step(args.run_id, args.step_id, {"message": args.message, "response": response})
-    except (TargetError, RunError) as error:
+    except (TargetError, LangfuseError, RunError) as error:
         mark_unknown(args.run_id, args.step_id, str(error))
         logger.error("Target request failed: {}", error)
         raise SystemExit(1) from error

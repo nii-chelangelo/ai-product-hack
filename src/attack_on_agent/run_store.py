@@ -102,6 +102,21 @@ def get_chat_response(run_id: str, step_id: str) -> str:
     raise RunError(f"Chat response for step '{step_id}' is missing")
 
 
+def get_tool_calls_from_step(run_id: str, step_id: str) -> list[dict[str, Any]]:
+    run_dir = _run_dir(run_id)
+    state = _load_existing_state(run_dir, run_id)
+    step = state["steps"].get(step_id)
+    if not step or step["operation"] != "collect-tool-evidence" or step["status"] != "completed":
+        raise RunError(f"Step '{step_id}' is not completed tool evidence")
+    for line in reversed((run_dir / "events.jsonl").read_text().splitlines()):
+        event = json.loads(line)
+        if event.get("event") == "completed" and event.get("step_id") == step_id:
+            tool_calls = event.get("evidence", {}).get("tool_calls")
+            if isinstance(tool_calls, list):
+                return tool_calls
+    raise RunError(f"Tool evidence for step '{step_id}' is missing")
+
+
 def save_diff(run_id: str, before_step: str, after_step: str, diff: dict[str, Any]) -> None:
     run_dir = _run_dir(run_id)
     _load_existing_state(run_dir, run_id)

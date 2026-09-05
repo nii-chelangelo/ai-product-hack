@@ -35,6 +35,19 @@ def load_campaign(path: Path) -> dict[str, Any]:
     return data
 
 
+def load_impact_campaign(path: Path) -> dict[str, Any]:
+    data = _load_yaml_mapping(path)
+    impact = _section(data, "impact")
+    tool = _section(impact, "tool")
+    _required_value(impact, "expected_marker", "impact")
+    denied_markers = impact.get("denied_markers")
+    if not isinstance(denied_markers, list) or not all(isinstance(marker, str) and marker for marker in denied_markers):
+        raise ConfigError("'impact.denied_markers' must be a non-empty list of strings")
+    _required_value(tool, "name", "impact.tool")
+    _required_value(tool, "expected_cus", "impact.tool")
+    return data
+
+
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     try:
         data = yaml.safe_load(path.read_text())

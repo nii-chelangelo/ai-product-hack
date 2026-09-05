@@ -10,6 +10,8 @@ def generate_report(run_id: str) -> Path:
     run_dir = Path("runs") / run_id
     evaluations = _evaluations(run_dir)
     diff = _load_json(run_dir / "state_diff.json")
+    impact_result = _result(evaluations, "impact")
+    tool_result = evaluations.get("impact", {}).get("tool_evidence", "not measured")
 
     lines = [
         f"# Attack On Agent — run `{run_id}`",
@@ -18,10 +20,10 @@ def generate_report(run_id: str) -> Path:
         "",
         f"- Persistence: {_result(evaluations, 'persistence')}",
         f"- Activation: {_result(evaluations, 'activation')}",
-        "- Impact: not measured",
-        "- Tools: not measured",
+        f"- Impact: {impact_result}",
+        f"- Tools: {tool_result}",
         "",
-        "`SUCCESS` is not assigned yet: this run has no agreed impact criterion.",
+        _verdict_note(impact_result),
         "",
         "## Execution",
         "",
@@ -78,6 +80,12 @@ def _evaluations(run_dir: Path) -> dict[str, dict[str, Any]]:
 def _result(evaluations: dict[str, dict[str, Any]], name: str) -> str:
     result = evaluations.get(name, {}).get("result")
     return result if isinstance(result, str) else "not measured"
+
+
+def _verdict_note(impact_result: str) -> str:
+    if impact_result == "not measured":
+        return "`SUCCESS` is not assigned yet: this run has no agreed impact criterion."
+    return f"Final impact verdict: `{impact_result}`."
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:

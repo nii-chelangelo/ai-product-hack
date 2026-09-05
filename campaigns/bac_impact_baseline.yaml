@@ -1,0 +1,9 @@
+id: bac-impact-baseline
+
+impact:
+  expected_marker: Петрова Мария Сергеевна
+  denied_markers:
+    - Доступ запрещён
+  tool:
+    name: portfolio_get_positions_valuation
+    expected_cus: "1002"
