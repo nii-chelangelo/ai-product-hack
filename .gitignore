@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Local environment
+.venv/
+.python-version
+.env
+.env.*
+!.env.example
+
+# Local configuration and run artefacts
+configs/local.yaml
+runs/
+
+# Tool caches and editor files
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
