@@ -13,6 +13,7 @@ def start_step(
     run_id: str,
     step_id: str,
     operation: str,
+    user_id: str,
     session_id: str,
     config: dict[str, Any],
     input_data: dict[str, Any] | None = None,
@@ -27,6 +28,7 @@ def start_step(
 
     state["steps"][step_id] = {
         "operation": operation,
+        "user_id": user_id,
         "session_id": session_id,
         "status": "started",
         "started_at": _now(),
@@ -38,6 +40,7 @@ def start_step(
             "event": "started",
             "step_id": step_id,
             "operation": operation,
+            "user_id": user_id,
             "session_id": session_id,
             "input": input_data or {},
         },
@@ -71,19 +74,30 @@ def get_status(run_id: str) -> dict[str, Any]:
 
 
 def get_snapshot(run_id: str, step_id: str) -> dict[str, Any]:
+    state = _load_existing_state(_run_dir(run_id), run_id)
+    step = state["steps"].get(step_id)
+    if not step or step["operation"] != "snapshot":
+        raise RunError(f"Step '{step_id}' is not a snapshot")
+    snapshot = get_step_evidence(run_id, step_id).get("memory_snapshot")
+    if not isinstance(snapshot, dict):
+        raise RunError(f"Snapshot evidence for step '{step_id}' is missing")
+    return snapshot
+
+
+def get_step_evidence(run_id: str, step_id: str) -> dict[str, Any]:
     run_dir = _run_dir(run_id)
     state = _load_existing_state(run_dir, run_id)
     step = state["steps"].get(step_id)
-    if not step or step["operation"] != "snapshot" or step["status"] != "completed":
-        raise RunError(f"Step '{step_id}' is not a completed snapshot")
+    if not step or step["status"] != "completed":
+        raise RunError(f"Step '{step_id}' is not completed")
 
     for line in reversed((run_dir / "events.jsonl").read_text().splitlines()):
         event = json.loads(line)
         if event.get("event") == "completed" and event.get("step_id") == step_id:
-            snapshot = event.get("evidence", {}).get("memory_snapshot")
-            if isinstance(snapshot, dict):
-                return snapshot
-    raise RunError(f"Snapshot evidence for step '{step_id}' is missing")
+            evidence = event.get("evidence")
+            if isinstance(evidence, dict):
+                return evidence
+    raise RunError(f"Evidence for step '{step_id}' is missing")
 
 
 def save_diff(run_id: str, before_step: str, after_step: str, diff: dict[str, Any]) -> None:
@@ -94,15 +108,23 @@ def save_diff(run_id: str, before_step: str, after_step: str, diff: dict[str, An
         "after_step": after_step,
         "diff": diff,
     }
-    (run_dir / "state_diff.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    diffs_dir = run_dir / "state_diffs"
+    diffs_dir.mkdir(exist_ok=True)
+    _diff_path(diffs_dir, before_step, after_step).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
 def get_diff(run_id: str, before_step: str, after_step: str) -> dict[str, Any]:
     run_dir = _run_dir(run_id)
-    payload = json.loads((run_dir / "state_diff.json").read_text())
+    payload = json.loads(_diff_path(run_dir / "state_diffs", before_step, after_step).read_text())
     if payload.get("before_step") != before_step or payload.get("after_step") != after_step:
         raise RunError("Saved state diff does not match the requested snapshots")
     return payload["diff"]
+
+
+def _diff_path(diffs_dir: Path, before_step: str, after_step: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", before_step) or not re.fullmatch(r"[A-Za-z0-9._-]+", after_step):
+        raise RunError("Diff step IDs contain unsupported characters")
+    return diffs_dir / f"{before_step}--{after_step}.json"
 
 
 def save_evaluation(run_id: str, name: str, result: dict[str, Any]) -> None:
@@ -129,6 +151,10 @@ def _load_state(run_dir: Path, run_id: str, config: dict[str, Any]) -> dict[str,
         "target": {
             "base_url": config["target"]["base_url"],
             "auth_mode": config["target"]["auth_mode"],
+        },
+        "reset": {
+            "available": bool(config["memory"].get("reset_path")),
+            "status": "not_run" if config["memory"].get("reset_path") else "unavailable",
         },
         "steps": {},
     }

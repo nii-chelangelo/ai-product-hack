@@ -15,7 +15,7 @@ def load_config(path: Path) -> dict[str, Any]:
     _required_value(data, "id", "config")
     _required_value(data, "adapter", "config")
     users = _section(data, "users")
-    default_user = _section(users, "user_1001")
+    _validate_users(users)
     target = _section(data, "target")
     memory = _section(data, "memory")
     langfuse = _section(data, "langfuse")
@@ -23,9 +23,6 @@ def load_config(path: Path) -> dict[str, Any]:
 
     _required_url(target, "base_url", "target")
     _required_path(target, "chat_path", "target")
-    api_key_env = _required_value(default_user, "api_key_env", "users.user_1001")
-    if not os.environ.get(api_key_env):
-        raise ConfigError(f"Environment variable '{api_key_env}' must be set")
     auth_mode = _required_value(target, "auth_mode", "target")
     if auth_mode not in {"vulnerable", "protected"}:
         raise ConfigError("'target.auth_mode' must be 'vulnerable' or 'protected'")
@@ -56,6 +53,17 @@ def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(section, dict):
         raise ConfigError(f"'{name}' must be a YAML mapping")
     return section
+
+
+def _validate_users(users: dict[str, Any]) -> None:
+    if not users:
+        raise ConfigError("'users' must contain at least one user")
+    for user_id, user in users.items():
+        if not isinstance(user_id, str) or not isinstance(user, dict):
+            raise ConfigError("'users' must map user IDs to YAML mappings")
+        api_key_env = _required_value(user, "api_key_env", f"users.{user_id}")
+        if not os.environ.get(api_key_env):
+            raise ConfigError(f"Environment variable '{api_key_env}' must be set")
 
 
 def _required_value(section: dict[str, Any], name: str, section_name: str) -> str:

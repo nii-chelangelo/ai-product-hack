@@ -21,6 +21,8 @@ Attack On Agent — defensive-security PoC для проверки AI-агент
 uv sync
 cp .env.example .env
 cp configs/agent.example.yaml configs/agent.yaml
+cp configs/attacks.example.yaml configs/attacks.yaml
+cp configs/experiment.example.yaml configs/experiment.yaml
 ```
 
 Заполни в `.env` ключ агента и read-only ключи Langfuse.
@@ -30,14 +32,20 @@ cp configs/agent.example.yaml configs/agent.yaml
 1. Подключить тестируемого агента к Langfuse и передавать в trace `user_id`, `session_id`, имя инструмента, аргументы, output и ошибки.
 2. Предоставить Target Adapter: API для chat, финализации сессии, read-only snapshot memory/state и reset состояния.
 3. Создать `configs/<agent>.yaml` с endpoint-ами, пользователями и именами переменных окружения для ключей.
-4. Создать `configs/attacks.yaml`: выбрать атаки, пользователей и измеряемые разрезы.
+4. Создать `configs/attacks.yaml` и `configs/experiment.yaml`.
 5. Проверить подключение:
 
    ```bash
    uv run --env-file .env attack-on-agent check --config configs/agent.yaml
    ```
 
-6. Выполнять шаги проверки через CLI и изучать evidence в `runs/<run-id>/`.
+6. Запустить эксперимент:
+
+   ```bash
+   uv run --env-file .env attack-on-agent run --config configs/experiment.yaml
+   ```
+
+7. Изучать evidence в `runs/<run-id>/`.
 
 ## Контракт подключения агента
 
@@ -55,22 +63,21 @@ Target Adapter — единственное место, которое зави�
 
 ## Конфигурация атак
 
-Campaign не зависит от target-а. Он задаёт набор атак, способ отбора и разрезы оценки. Например:
+Campaign не зависит от target-а. Он задаёт delivery, activation и разрезы оценки для каждой атаки. Например:
 
 ```yaml
 attacks:
-  mode: include
-  ids: [memory-persistence, tool-injection]
+  - id: controlled-memory-canary
+    delivery:
+      messages: ["..."]
+    activation:
+      messages: ["..."]
+    markers: [AOA_MEMORY_CANARY_001]
+    evaluation:
+      dimensions: [memory, cross_session, output]
 ```
 
-Или запустить все доступные атаки:
-
-```yaml
-attacks:
-  mode: all
-```
-
-`all` и `include` взаимоисключающие: у `all` нет `ids`, у `include` список обязателен. Полный шаблон: [`configs/attacks.example.yaml`](configs/attacks.example.yaml).
+`markers` — контролируемые признаки, по которым evaluator ищет влияние в memory, ответах и аргументах tools. Полный шаблон: [`configs/attacks.example.yaml`](configs/attacks.example.yaml).
 
 ## Данные эксперимента
 

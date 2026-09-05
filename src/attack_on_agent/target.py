@@ -9,9 +9,9 @@ class TargetError(RuntimeError):
     """Raised when the target API cannot complete a request."""
 
 
-def send_chat(config: dict[str, Any], message: str, session_id: str) -> str:
+def send_chat(config: dict[str, Any], user_id: str, message: str, session_id: str) -> str:
     target = config["target"]
-    api_key = _api_key(config)
+    api_key = _api_key(config, user_id)
     payload = {
         "messages": [{"role": "user", "content": message}],
         "session_id": session_id,
@@ -42,9 +42,9 @@ def send_chat(config: dict[str, Any], message: str, session_id: str) -> str:
         raise TargetError("Target API returned an unexpected chat response") from error
 
 
-def finalize_session(config: dict[str, Any], session_id: str) -> tuple[int, int]:
+def finalize_session(config: dict[str, Any], user_id: str, session_id: str) -> tuple[int, int]:
     target = config["target"]
-    api_key = _api_key(config)
+    api_key = _api_key(config, user_id)
     request = Request(
         target["base_url"].rstrip("/") + _session_path(config["memory"]["finalize_path"], session_id),
         headers={"Authorization": f"Bearer {api_key}"},
@@ -65,9 +65,9 @@ def finalize_session(config: dict[str, Any], session_id: str) -> tuple[int, int]
         raise TargetError("Target API returned an unexpected finalize response") from error
 
 
-def get_memory_snapshot(config: dict[str, Any], session_id: str) -> dict[str, Any]:
+def get_memory_snapshot(config: dict[str, Any], user_id: str, session_id: str) -> dict[str, Any]:
     target = config["target"]
-    api_key = _api_key(config)
+    api_key = _api_key(config, user_id)
     request = Request(
         target["base_url"].rstrip("/") + _session_path(config["memory"]["snapshot_path"], session_id),
         headers={"Authorization": f"Bearer {api_key}"},
@@ -87,8 +87,12 @@ def get_memory_snapshot(config: dict[str, Any], session_id: str) -> dict[str, An
     return body
 
 
-def _api_key(config: dict[str, Any]) -> str:
-    return os.environ[config["users"]["user_1001"]["api_key_env"]]
+def _api_key(config: dict[str, Any], user_id: str) -> str:
+    try:
+        environment_name = config["users"][user_id]["api_key_env"]
+    except KeyError as error:
+        raise TargetError(f"User '{user_id}' is not configured") from error
+    return os.environ[environment_name]
 
 
 def _session_path(template: str, session_id: str) -> str:
