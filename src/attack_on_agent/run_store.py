@@ -86,6 +86,22 @@ def get_snapshot(run_id: str, step_id: str) -> dict[str, Any]:
     raise RunError(f"Snapshot evidence for step '{step_id}' is missing")
 
 
+def get_chat_response(run_id: str, step_id: str) -> str:
+    run_dir = _run_dir(run_id)
+    state = _load_existing_state(run_dir, run_id)
+    step = state["steps"].get(step_id)
+    if not step or step["operation"] != "chat" or step["status"] != "completed":
+        raise RunError(f"Step '{step_id}' is not a completed chat")
+
+    for line in reversed((run_dir / "events.jsonl").read_text().splitlines()):
+        event = json.loads(line)
+        if event.get("event") == "completed" and event.get("step_id") == step_id:
+            response = event.get("evidence", {}).get("response")
+            if isinstance(response, str):
+                return response
+    raise RunError(f"Chat response for step '{step_id}' is missing")
+
+
 def save_diff(run_id: str, before_step: str, after_step: str, diff: dict[str, Any]) -> None:
     run_dir = _run_dir(run_id)
     _load_existing_state(run_dir, run_id)

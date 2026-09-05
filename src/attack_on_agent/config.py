@@ -10,15 +10,7 @@ class ConfigError(ValueError):
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    try:
-        data = yaml.safe_load(path.read_text())
-    except FileNotFoundError as error:
-        raise ConfigError(f"Configuration file not found: {path}") from error
-    except yaml.YAMLError as error:
-        raise ConfigError(f"Invalid YAML in {path}: {error}") from error
-
-    if not isinstance(data, dict):
-        raise ConfigError("Configuration must be a YAML mapping")
+    data = _load_yaml_mapping(path)
 
     target = _section(data, "target")
     langfuse = _section(data, "langfuse")
@@ -33,6 +25,26 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ConfigError("'target.auth_mode' must be 'vulnerable' or 'protected'")
     _required_url(langfuse, "base_url", "langfuse")
     _required_value(logging, "path", "logging")
+    return data
+
+
+def load_campaign(path: Path) -> dict[str, Any]:
+    data = _load_yaml_mapping(path)
+    evaluation = _section(data, "evaluation")
+    _required_value(evaluation, "expected_marker", "evaluation")
+    return data
+
+
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(path.read_text())
+    except FileNotFoundError as error:
+        raise ConfigError(f"Configuration file not found: {path}") from error
+    except yaml.YAMLError as error:
+        raise ConfigError(f"Invalid YAML in {path}: {error}") from error
+
+    if not isinstance(data, dict):
+        raise ConfigError("Configuration must be a YAML mapping")
     return data
 
 

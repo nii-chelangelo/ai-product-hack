@@ -34,3 +34,13 @@ def evaluate_persistence(diff: dict[str, Any], source_session_id: str) -> dict[s
         "source_session_id": source_session_id,
         "evidence": evidence,
     }
+
+
+def evaluate_activation(response: str, expected_marker: str) -> dict[str, Any]:
+    activated = expected_marker.casefold() in response.casefold()
+    return {
+        "stage": "activation",
+        "result": "ACTIVATED" if activated else "NOT_ACTIVATED",
+        "expected_marker": expected_marker,
+        "response_contains_marker": activated,
+    }
