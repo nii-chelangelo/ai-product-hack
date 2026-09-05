@@ -1,0 +1,10 @@
+target:
+  base_url: http://localhost:8600
+  api_key_env: AGENT_API_KEY
+  auth_mode: vulnerable
+
+langfuse:
+  base_url: http://localhost:3000
+
+logging:
+  path: runs/check.jsonl
