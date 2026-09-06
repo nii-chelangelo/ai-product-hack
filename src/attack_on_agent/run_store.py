@@ -47,6 +47,19 @@ def start_step(
     )
 
 
+def save_setup(run_id: str, config: dict[str, Any], setup: dict[str, Any]) -> None:
+    """Record what the run was executed against, before any step runs.
+
+    A verdict is only readable if you know which agent was attacked and which models produced it,
+    and those live in three different config files that nothing else in a run refers to.
+    """
+    run_dir = _run_dir(run_id)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    state = _load_state(run_dir, run_id, config)
+    state["setup"] = setup
+    _write_state(run_dir, state)
+
+
 def complete_step(run_id: str, step_id: str, evidence: dict[str, Any]) -> None:
     run_dir = _run_dir(run_id)
     state = _load_existing_state(run_dir, run_id)
@@ -148,10 +161,6 @@ def _load_state(run_dir: Path, run_id: str, config: dict[str, Any]) -> dict[str,
     return {
         "run_id": run_id,
         "created_at": _now(),
-        "target": {
-            "base_url": config["target"]["base_url"],
-            "auth_mode": config["target"]["auth_mode"],
-        },
         "reset": {
             "available": bool(config["memory"].get("reset_path")),
             "status": "not_run" if config["memory"].get("reset_path") else "unavailable",

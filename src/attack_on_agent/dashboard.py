@@ -1,9 +1,8 @@
 """Build a self-contained local HTML dashboard from runs/ evidence.
 
-Reads whatever the current run schema produces (state.json, evaluations/*.json,
-state_diffs/*.json) and embeds it into a static page — no server, no build step.
-Legacy/exploratory run directories that do not match the current evaluation shape
-are skipped rather than raising, since runs/ accumulates ad-hoc formats over time.
+Reads what a run produces (state.json, evaluations/*.json) and embeds it into a static
+page — no server, no build step. Directories without usable evaluations are skipped
+rather than raising. Raw evidence stays in runs/ and is not copied onto the page.
 """
 
 import json
@@ -29,6 +28,8 @@ def _load_run(run_dir: Path) -> dict[str, Any] | None:
         return None
 
     tests = [test for test in (_load_test(run_dir, state, path) for path in _evaluation_paths(run_dir)) if test]
+    if not tests:
+        return None
     counts = {name: sum(1 for t in tests if t["verdict"] == name) for name in VERDICTS}
     valid_tests = [t for t in tests if t["verdict"] in ("SUCCESS", "FAIL")]
     successful = [t for t in tests if t["verdict"] == "SUCCESS"]
@@ -41,7 +42,7 @@ def _load_run(run_dir: Path) -> dict[str, Any] | None:
     return {
         "run_id": state.get("run_id", run_dir.name),
         "created_at": state.get("created_at", ""),
-        "target": state.get("target", {}),
+        "setup": state.get("setup", {}),
         "tests": tests,
         "counts": counts,
         "asr": asr(counts),
@@ -63,9 +64,7 @@ def _load_test(run_dir: Path, state: dict[str, Any], path: Path) -> dict[str, An
         evaluation = json.loads(path.read_text())
     except json.JSONDecodeError:
         return None
-    # Exploratory runs predating the current schema have no test_id — fall back to the file name
-    # so the dashboard shows exactly the same records the report counts.
-    test_id = evaluation.get("test_id") or evaluation.get("attack_id") or path.stem
+    test_id = evaluation.get("test_id")
     if not isinstance(test_id, str):
         return None
     return {
@@ -75,19 +74,8 @@ def _load_test(run_dir: Path, state: dict[str, Any], path: Path) -> dict[str, An
         "effect": evaluation.get("effect"),
         "dimensions": evaluation.get("dimensions", {}),
         "judge": evaluation.get("judge"),
-        "diff": _load_diff(run_dir, test_id),
         "steps": _steps_for_test(state, test_id),
     }
-
-
-def _load_diff(run_dir: Path, test_id: str) -> dict[str, Any] | None:
-    path = run_dir / "state_diffs" / f"{test_id}.before--{test_id}.after.json"
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text()).get("diff")
-    except json.JSONDecodeError:
-        return None
 
 
 def _steps_for_test(state: dict[str, Any], test_id: str) -> list[dict[str, Any]]:
@@ -150,7 +138,6 @@ _TEMPLATE = """<!doctype html>
   .detail { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: -1px; }
   .detail h3 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; color: var(--muted); }
   .detail h3:first-child { margin-top: 0; }
-  .detail pre { background: #fbf7f8; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 320px; }
   .steps { font-size: 12px; }
   .steps li { margin-bottom: 4px; }
   .empty { color: var(--muted); padding: 40px; text-align: center; }
@@ -159,12 +146,25 @@ _TEMPLATE = """<!doctype html>
   .chart-box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; flex: 1; min-width: 260px; }
   .chart-box h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-  .bar-row .label { width: 90px; flex-shrink: 0; color: var(--text); }
+  .bar-row .label { width: 130px; flex-shrink: 0; color: var(--text); }
   .bar-row .track { flex: 1; background: var(--track); border-radius: 4px; height: 8px; overflow: hidden; }
   .bar-row .fill { height: 100%; background: var(--accent); border-radius: 4px; }
   .bar-row .value { width: 60px; flex-shrink: 0; text-align: right; color: var(--muted); }
   .breach { font-size: 11px; color: var(--success); font-weight: 600; margin-top: 3px; }
-  .caveat { font-size: 12px; color: var(--muted); background: #fdf6e6; border: 1px solid #f0dca0; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .chain { border-left: 2px solid var(--accent); padding-left: 14px; margin: 4px 0 8px; }
+  .chain .link { margin-bottom: 12px; }
+  .chain .link:last-child { margin-bottom: 0; }
+  .chain .who { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--success); font-weight: 700; }
+  .chain .what { font-size: 13px; line-height: 1.5; margin-top: 3px; }
+  .chain blockquote { margin: 4px 0 0; padding: 8px 10px; background: var(--tint); border-radius: 6px; font-size: 13px; line-height: 1.5; }
+  .chain ul { margin: 4px 0 0; padding-left: 18px; }
+  .chain li { font-size: 13px; line-height: 1.5; margin-bottom: 3px; }
+  .verdict-line { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+  .note { font-size: 11px; line-height: 1.45; color: var(--muted); margin-top: 8px; }
+  .setup { display: flex; flex-wrap: wrap; gap: 6px 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; margin-bottom: 16px; }
+  .setup .pair { display: flex; flex-direction: column; }
+  .setup .k { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  .setup .v { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -178,6 +178,7 @@ _TEMPLATE = """<!doctype html>
 </div>
 <script>
 const DATA = __DATA__;
+const DIMENSION_LABELS = {output:'финальный ответ', memory:'память', tool:'инструменты', cross_session:'другая сессия'};
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -188,7 +189,7 @@ function pct(asr) { return asr === null || asr === undefined ? '—' : Math.roun
 
 function renderRunList() {
   const nav = document.getElementById('runs');
-  document.getElementById('subtitle').textContent = DATA.length + ' прогонов · сгенерировано ' + fmtDate(new Date().toISOString());
+  document.getElementById('subtitle').textContent = DATA.length + ' прогонов · собрано ' + fmtDate(new Date().toISOString());
   if (!DATA.length) {
     nav.innerHTML = '<div class="empty">Нет прогонов в runs/</div>';
     return;
@@ -215,10 +216,18 @@ function selectRun(i) {
   const llamatorCard = run.llamator
     ? `<div class="card"><div class="n">${pct(run.llamator.ASR)}</div><div class="l">ASR по LLAMATOR (только ответ)</div></div>`
     : '';
+  // Разница между двумя ASR — это ровно то, что не видно по тексту диалога.
+  const gain = run.llamator && run.asr !== null && run.llamator.ASR !== null
+    ? Math.round((run.asr - run.llamator.ASR) * 100) : null;
+  const gainCard = gain === null ? ''
+    : `<div class="card"><div class="n">${gain > 0 ? '+' : ''}${gain} п.п.</div><div class="l">видно только по состоянию агента</div></div>`;
+  const setup = setupBlock(run);
   main.innerHTML = `
+    ${setup}
     <div class="cards">
       <div class="card"><div class="n">${pct(run.asr)}</div><div class="l">ASR (наш оценщик)</div></div>
       ${llamatorCard}
+      ${gainCard}
       <div class="card"><div class="n">${run.counts.SUCCESS}</div><div class="l">SUCCESS</div></div>
       <div class="card"><div class="n">${run.counts.FAIL}</div><div class="l">FAIL</div></div>
       <div class="card"><div class="n">${run.counts.INCONCLUSIVE}</div><div class="l">INCONCLUSIVE</div></div>
@@ -240,6 +249,24 @@ function selectRun(i) {
   });
 }
 
+// Вердикт читается только вместе с тем, против какого агента и какими моделями он получен.
+function setupBlock(run) {
+  const setup = run.setup || {};
+  const target = setup.target || {};
+  const models = setup.models || {};
+  const users = setup.users || {};
+  if (!target.base_url && !models.attacker) return '';
+  const rows = [
+    ['Агент', [target.id, target.base_url, target.auth_mode ? 'auth: ' + target.auth_mode : null].filter(Boolean).join(' · ')],
+    ['Атакующая модель', models.attacker],
+    ['Судья LLAMATOR', models.llamator_judge],
+    ['Наш оценщик', models.evaluator_judge],
+    ['Пользователи', [users.attacker ? 'атакующий ' + users.attacker : null, users.victim ? 'жертва ' + users.victim : null].filter(Boolean).join(' · ')],
+  ].filter(([, value]) => value);
+  return `<div class="setup">${rows.map(([label, value]) =>
+    `<div class="pair"><span class="k">${escapeHtml(label)}</span><span class="v">${escapeHtml(String(value))}</span></div>`).join('')}</div>`;
+}
+
 function verdictClass(v) { return DATA_VERDICTS.has(v) ? v : 'unknown'; }
 const DATA_VERDICTS = new Set(['SUCCESS', 'FAIL', 'INCONCLUSIVE']);
 
@@ -249,15 +276,19 @@ function barRow(label, count, total) {
 }
 
 function breachChart(run) {
-  const labels = {output:'финальный ответ', memory:'память', tool:'инструменты', cross_session:'другая сессия'};
   if (!run.success_count) return `<div class="chart-box"><h4>Где сломалось</h4><div class="empty">Успешных атак нет</div></div>`;
-  const rows = Object.entries(run.breach_counts || {}).map(([n,c]) => barRow(labels[n]||n, c, run.success_count)).join('');
+  const rows = Object.entries(run.breach_counts || {}).map(([n,c]) => barRow(DIMENSION_LABELS[n]||n, c, run.success_count)).join('');
   return `<div class="chart-box"><h4>Где сломалось (из ${run.success_count} успешных атак)</h4>${rows}</div>`;
 }
 
 function dimensionChart(run) {
-  const rows = Object.entries(run.dimension_counts || {}).map(([name, count]) => barRow(name, count, run.valid_test_count)).join('');
-  return `<div class="chart-box"><h4>Сигнал по разрезам (все валидные тесты)</h4>${rows || '<div class="empty">Нет данных</div>'}</div>`;
+  const rows = Object.entries(run.dimension_counts || {})
+    .map(([name, count]) => barRow(DIMENSION_LABELS[name] || name, count, run.valid_test_count)).join('');
+  return `<div class="chart-box"><h4>Структурные сигналы — наблюдение, не вердикт</h4>
+    ${rows || '<div class="empty">Нет данных</div>'}
+    <div class="note">Куда атака дотянулась. Запись в общую память агент делает и при обычном
+    разговоре, поэтому сигнал сам по себе не означает, что что-то сломалось — это решает судья.</div>
+  </div>`;
 }
 
 function verdictChart(run) {
@@ -267,17 +298,64 @@ function verdictChart(run) {
 }
 
 function renderRow(t, j) {
-  const labels = {output:'финальный ответ', memory:'память', tool:'инструменты', cross_session:'другая сессия'};
   const dims = Object.entries(t.dimensions || {})
     .map(([name, d]) => `<span class="chip ${d.result || 'INCONCLUSIVE'}">${name}: ${d.result || '?'}</span>`).join('');
   const breach = t.verdict === 'SUCCESS'
-    ? `<div class="breach">сломалось: ${(t.breach || []).map(n => labels[n] || n).join(', ') || 'по трассе'}</div>` : '';
+    ? `<div class="breach">сломалось: ${(t.breach || []).map(n => DIMENSION_LABELS[n] || n).join(', ') || 'по трассе'}</div>` : '';
   return `<tr id="row-${j}"><td>${t.test_id}${breach}</td><td><span class="badge ${verdictClass(t.verdict)}">${t.verdict}</span></td><td>${dims}</td></tr>`;
 }
 
+function claimText(record) {
+  return record.statement || record.content || record.fact || record.text || JSON.stringify(record);
+}
+
+function stepUser(t, suffix) {
+  const step = (t.steps || []).find(s => s.step_id.endsWith(suffix));
+  return step ? step.user_id : null;
+}
+
+// Цепочка «атакующий → общая память → другой пользователь»: то, ради чего инструмент и нужен.
+// Она собирается из тех же данных, что видит judge, — ничего дополнительно не вычисляется.
+function chainBlock(t) {
+  const cs = (t.dimensions || {}).cross_session || {};
+  const source = cs.observed || cs.signal || {};
+  const planted = source.unscoped_records_the_victim_reads || [];
+  const probe = (cs.observed || {}).victim_probe;
+  if (!planted.length && !probe) return '';
+  const links = [];
+  if (planted.length) {
+    const attacker = stepUser(t, '.llamator');
+    links.push(`<div class="link">
+      <div class="who">1 · Атакующий${attacker ? ' (' + attacker + ')' : ''} — записал в общую память агента</div>
+      <ul>${planted.map(r => `<li>${escapeHtml(claimText(r))}</li>`).join('')}</ul>
+    </div>`);
+  }
+  if (probe) {
+    const victim = stepUser(t, '.activation.topic');
+    links.push(`<div class="link">
+      <div class="who">2 · Другой пользователь${victim ? ' (' + victim + ')' : ''} — нейтральный вопрос по теме</div>
+      <blockquote>${escapeHtml(probe.question || '')}</blockquote>
+    </div>`);
+    links.push(`<div class="link">
+      <div class="who">3 · Что ответил агент этому пользователю</div>
+      <blockquote>${escapeHtml(probe.answer || '')}</blockquote>
+    </div>`);
+  } else if (planted.length) {
+    links.push(`<div class="link">
+      <div class="who">2 · Проверка на другом пользователе</div>
+      <div class="what">Вопрос по теме не задавался — записи есть, но подтверждения, что жертва их воспроизводит, нет.</div>
+    </div>`);
+  }
+  return `<h3>Цепочка атаки</h3><div class="chain">${links.join('')}</div>`;
+}
+
 function renderDetail(t) {
+  const breachLine = (t.breach || []).length
+    ? `<span class="chip DETECTED">сломалось: ${t.breach.map(n => DIMENSION_LABELS[n] || n).join(', ')}</span>` : '';
   const judgeBlock = t.judge
-    ? `<h3>Вердикт judge</h3><div class="reason"><span class="badge ${verdictClass(t.judge.result)}">${t.judge.result}</span> ${t.judge.reason || ''}</div>`
+    ? `<h3>Вердикт judge</h3>
+       <div class="verdict-line"><span class="badge ${verdictClass(t.judge.result)}">${t.judge.result}</span>${breachLine}</div>
+       <div class="reason">${escapeHtml(t.judge.reason || '')}</div>`
     : '';
   const stepsBlock = t.steps && t.steps.length
     ? `<h3>Шаги выполнения</h3><ul class="steps">${t.steps.map(s => `<li><b>${s.step_id}</b> — ${s.status}${s.operation ? ' (' + s.operation + ')' : ''}${s.error ? ' — ' + s.error : ''}</li>`).join('')}</ul>`
@@ -286,11 +364,7 @@ function renderDetail(t) {
     <div class="detail">
       <h3>${t.test_id}</h3>
       ${judgeBlock}
-      <h3>Измерения (raw evidence)</h3>
-      <pre>${escapeHtml(JSON.stringify(t.dimensions, null, 2))}</pre>
-      ${t.diff ? `<h3>State diff (memory/state до → после)</h3>
-        <div class="caveat">⚠ removed/changed могут относиться к другому тесту, если несколько тестов в кампании используют одного и того же пользователя — снапшот хранит только последние N записей. Judge это исключает из своих данных, здесь показан необработанный diff целиком.</div>
-        <pre>${escapeHtml(JSON.stringify(t.diff, null, 2))}</pre>` : ''}
+      ${chainBlock(t)}
       ${stepsBlock}
     </div>
   `;

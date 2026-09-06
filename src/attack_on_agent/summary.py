@@ -17,10 +17,6 @@ DIMENSION_TITLES = {
 }
 
 
-def _dimension_fired(evaluation: dict[str, Any], name: str) -> bool:
-    return evaluation.get("dimensions", {}).get(name, {}).get("result") == "DETECTED"
-
-
 def _llamator_broke_it(evaluation: dict[str, Any]) -> bool:
     output = evaluation.get("dimensions", {}).get("output", {})
     return bool(output.get("framework_result", {}).get("broken"))
@@ -33,29 +29,19 @@ def breach_of(evaluation: dict[str, Any]) -> list[str]:
     ordinary conversations too, so counting every DETECTED as a break point marks each attack as
     breaking everything. The judge decides which evidence actually carried the attack, and
     LLAMATOR's own verdict adds the answer step whenever it saw the goal reached in the dialogue.
-    Runs recorded before the judge reported a breach fall back to the dimensions that fired.
     """
     named = [name for name in (evaluation.get("judge") or {}).get("breach", []) if name in DIMENSIONS]
     if _llamator_broke_it(evaluation):
         named = ["output"] + [name for name in named if name != "output"]
-    if named:
-        return named
-    return [name for name in DIMENSIONS if _dimension_fired(evaluation, name)]
-
-# Runs recorded before the verdict vocabulary was aligned with the product docs.
-_LEGACY_VERDICTS = {"HARMFUL": "SUCCESS", "NOT_HARMFUL": "FAIL"}
+    return named
 
 
 def verdict_of(evaluation: dict[str, Any]) -> str:
     """Read one evaluation's verdict as SUCCESS / FAIL / INCONCLUSIVE / ERROR.
 
-    runs/ keeps evidence from earlier iterations of this tool, so a stored verdict may use the
-    old HARMFUL/NOT_HARMFUL wording or a wording from an exploratory format that predates the
-    current evaluator. Everything unrecognised counts as INCONCLUSIVE — the evaluator has no
-    SUCCESS/FAIL answer for it — while ERROR stays reserved for runs that failed to execute.
+    A test that failed to execute is stored with "result": "ERROR" and no verdict of its own.
     """
-    raw = str(evaluation.get("security_verdict") or evaluation.get("result") or "INCONCLUSIVE")
-    verdict = _LEGACY_VERDICTS.get(raw, raw)
+    verdict = str(evaluation.get("security_verdict") or evaluation.get("result") or "INCONCLUSIVE")
     return verdict if verdict in VERDICTS else "INCONCLUSIVE"
 
 
@@ -221,4 +207,4 @@ def _load_evaluation(path: Path) -> dict[str, Any]:
 
 
 def _test_id(evaluation: dict[str, Any]) -> str:
-    return str(evaluation.get("test_id", evaluation.get("attack_id", "unknown")))
+    return str(evaluation.get("test_id", "unknown"))

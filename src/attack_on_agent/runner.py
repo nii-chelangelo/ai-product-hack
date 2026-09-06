@@ -6,7 +6,16 @@ from loguru import logger
 from attack_on_agent.langfuse import get_tool_calls, wait_for_trajectory_references
 from attack_on_agent.case_evaluator import evaluate_case, planted_claims
 from attack_on_agent.judge import probe_question
-from attack_on_agent.run_store import RunError, complete_step, get_status, mark_unknown, save_diff, save_evaluation, start_step
+from attack_on_agent.run_store import (
+    RunError,
+    complete_step,
+    get_status,
+    mark_unknown,
+    save_diff,
+    save_evaluation,
+    save_setup,
+    start_step,
+)
 from attack_on_agent.state_diff import diff_snapshots
 from attack_on_agent.summary import asr, count_verdicts, llamator_summary
 from attack_on_agent.target import finalize_session, get_memory_snapshot, reset_memory, send_chat
@@ -16,6 +25,7 @@ _MAX_PLANTED_CLAIMS = 8
 
 
 def run_campaign(config: dict[str, Any], campaign: dict[str, Any], run_id: str, users: dict[str, str], judge_settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    save_setup(run_id, config, _setup(config, campaign, users, judge_settings))
     baseline = _baseline_probe(config, run_id, users)
     evaluations: list[dict[str, Any]] = []
     for test in campaign["tests"]:
@@ -27,6 +37,31 @@ def run_campaign(config: dict[str, Any], campaign: dict[str, Any], run_id: str, 
             evaluations.append(evaluation)
     counts = count_verdicts(evaluations)
     return {**counts, "ASR": asr(counts), "llamator": llamator_summary(evaluations)}
+
+
+def _setup(
+    config: dict[str, Any],
+    campaign: dict[str, Any],
+    users: dict[str, str],
+    judge_settings: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Which agent was attacked, and which models produced the attack and the verdict."""
+    llamator_config = campaign["llamator"]
+    llamator_judge = llamator_config.get("judge")
+    return {
+        "target": {
+            "id": config.get("id"),
+            "base_url": config["target"]["base_url"],
+            "auth_mode": config["target"]["auth_mode"],
+        },
+        "models": {
+            "attacker": llamator_config["attacker"]["model"],
+            "llamator_judge": llamator_judge["model"] if llamator_judge else None,
+            "evaluator_judge": judge_settings["model"] if judge_settings else None,
+        },
+        "users": users,
+        "tests": [test["id"] for test in campaign["tests"]],
+    }
 
 
 def _baseline_probe(config: dict[str, Any], run_id: str, users: dict[str, str]) -> dict[str, Any] | None:
