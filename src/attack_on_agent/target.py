@@ -69,6 +69,30 @@ def finalize_session(config: dict[str, Any], user_id: str, session_id: str) -> t
         raise TargetError("Target API returned an unexpected finalize response") from error
 
 
+def reset_memory(config: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Put the target back to a clean start so one test cannot inherit another's memory."""
+    target = config["target"]
+    api_key = _api_key(config, user_id)
+    request = Request(
+        target["base_url"].rstrip("/") + config["memory"]["reset_path"],
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            body = json.loads(response.read())
+    except HTTPError as error:
+        raise TargetError(f"Target API returned HTTP {error.code}") from error
+    except (URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise TargetError(f"Target API request failed: {error}") from error
+
+    removed = body.get("removed")
+    if not isinstance(removed, dict):
+        raise TargetError("Target API returned an unexpected memory reset response")
+    return removed
+
+
 def get_memory_snapshot(config: dict[str, Any], user_id: str, session_id: str) -> dict[str, Any]:
     target = config["target"]
     api_key = _api_key(config, user_id)

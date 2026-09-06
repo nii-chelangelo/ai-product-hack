@@ -16,3 +16,6 @@ attack-on-agent = "attack_on_agent.cli:main"
 [build-system]
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+llamator = { git = "https://github.com/seniorfroggy/llamator", rev = "9ddb5f06bed21d0dfb724955a148294d239eb17c" }

@@ -190,7 +190,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "llamator", specifier = "==3.5.0" },
+    { name = "llamator", git = "https://github.com/seniorfroggy/llamator?rev=9ddb5f06bed21d0dfb724955a148294d239eb17c" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
@@ -1087,7 +1087,7 @@ wheels = [
 [[package]]
 name = "llamator"
 version = "3.5.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/seniorfroggy/llamator?rev=9ddb5f06bed21d0dfb724955a148294d239eb17c#9ddb5f06bed21d0dfb724955a148294d239eb17c" }
 dependencies = [
     { name = "colorama" },
     { name = "datasets" },
@@ -1110,10 +1110,6 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/8c/bbe3587bc82b01a872c0f59932024da5f2108991c7481fe64c65b1c102c3/llamator-3.5.0.tar.gz", hash = "sha256:9a25f0f7daf0a6ef02f2b6fda72c3f357424a348173bd8cf6649ebb28815d602", size = 1500145, upload-time = "2026-01-15T18:39:06.944Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/bf/54682d8467cd3e7b073d8b2b1f19d190ec78f4b2aa493e6f3a3674190f58/llamator-3.5.0-py2.py3-none-any.whl", hash = "sha256:77ce462bbdc53ee3a75c805209872a60723398a569172488e83c0f0ef9e1f75a", size = 1543538, upload-time = "2026-01-15T18:39:00.208Z" },
 ]
 
 [[package]]
