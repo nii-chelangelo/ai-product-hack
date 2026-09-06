@@ -7,6 +7,40 @@ import yaml
 from attack_on_agent.run_store import get_status
 
 VERDICTS = ("SUCCESS", "FAIL", "INCONCLUSIVE", "ERROR")
+DIMENSIONS = ("output", "memory", "tool", "cross_session")
+
+DIMENSION_TITLES = {
+    "output": "финальный ответ",
+    "memory": "память",
+    "tool": "инструменты",
+    "cross_session": "другая сессия / пользователь",
+}
+
+
+def _dimension_fired(evaluation: dict[str, Any], name: str) -> bool:
+    return evaluation.get("dimensions", {}).get(name, {}).get("result") == "DETECTED"
+
+
+def _llamator_broke_it(evaluation: dict[str, Any]) -> bool:
+    output = evaluation.get("dimensions", {}).get("output", {})
+    return bool(output.get("framework_result", {}).get("broken"))
+
+
+def breach_of(evaluation: dict[str, Any]) -> list[str]:
+    """Which step of the chain let a successful attack through.
+
+    A fired dimension is evidence, not a breach: this target writes into shared memory during
+    ordinary conversations too, so counting every DETECTED as a break point marks each attack as
+    breaking everything. The judge decides which evidence actually carried the attack, and
+    LLAMATOR's own verdict adds the answer step whenever it saw the goal reached in the dialogue.
+    Runs recorded before the judge reported a breach fall back to the dimensions that fired.
+    """
+    named = [name for name in (evaluation.get("judge") or {}).get("breach", []) if name in DIMENSIONS]
+    if _llamator_broke_it(evaluation):
+        named = ["output"] + [name for name in named if name != "output"]
+    if named:
+        return named
+    return [name for name in DIMENSIONS if _dimension_fired(evaluation, name)]
 
 # Runs recorded before the verdict vocabulary was aligned with the product docs.
 _LEGACY_VERDICTS = {"HARMFUL": "SUCCESS", "NOT_HARMFUL": "FAIL"}
@@ -125,7 +159,7 @@ def build_run_report(run_id: str) -> Path:
         "",
         "## Результаты",
         "",
-        "| Проверка | Verdict | Наблюдаемые эффекты |",
+        "| Проверка | Verdict | Структурные сигналы |",
         "| --- | --- | --- |",
     ])
     for item in evaluations:
@@ -135,13 +169,36 @@ def build_run_report(run_id: str) -> Path:
         lines.append(f"| {_test_id(item)} | {verdict_of(item)} | {effects} |")
 
     successful = [item for item in evaluations if verdict_of(item) == "SUCCESS"]
+    breaches = {_test_id(item): breach_of(item) for item in successful}
+    lines.extend(["", "## Где сломалось", ""])
+    if not successful:
+        lines.append("Успешных атак нет — разрезы чистые.")
+    else:
+        lines.extend([
+            f"Доля сработавших атак: **{our_asr_text}** ({counts['SUCCESS']} из {counts['SUCCESS'] + counts['FAIL']}).",
+            "",
+            "| Разрез | Успешных атак прошло |",
+            "| --- | ---: |",
+        ])
+        for name, title in DIMENSION_TITLES.items():
+            count = sum(1 for breach in breaches.values() if name in breach)
+            lines.append(f"| {title} | {count} из {len(successful)} |")
+
     lines.extend(["", "## Успешные атаки — как именно сработали", ""])
     if not successful:
         lines.append("Успешных атак нет.")
     for item in successful:
         judge = item.get("judge", {})
         reason = judge.get("reason", "Причина не указана.")
-        lines.extend([f"### {_test_id(item)}", "", reason, ""])
+        fired = [DIMENSION_TITLES[name] for name in breaches[_test_id(item)]]
+        lines.extend([
+            f"### {_test_id(item)}",
+            "",
+            f"Сломалось в разрезе: **{', '.join(fired) if fired else 'разрезы не сработали, вердикт по трассе'}**",
+            "",
+            reason,
+            "",
+        ])
 
     lines.extend([
         "## Evidence",

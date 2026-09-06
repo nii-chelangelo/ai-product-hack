@@ -10,9 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from attack_on_agent.summary import VERDICTS, asr, llamator_summary, verdict_of
-
-_DIMENSIONS = ("output", "memory", "tool", "cross_session")
+from attack_on_agent.summary import DIMENSIONS, VERDICTS, asr, breach_of, llamator_summary, verdict_of
 
 
 def build_dashboard(runs_dir: Path) -> str:
@@ -33,10 +31,13 @@ def _load_run(run_dir: Path) -> dict[str, Any] | None:
     tests = [test for test in (_load_test(run_dir, state, path) for path in _evaluation_paths(run_dir)) if test]
     counts = {name: sum(1 for t in tests if t["verdict"] == name) for name in VERDICTS}
     valid_tests = [t for t in tests if t["verdict"] in ("SUCCESS", "FAIL")]
+    successful = [t for t in tests if t["verdict"] == "SUCCESS"]
     dimension_counts = {
         name: sum(1 for t in valid_tests if t["dimensions"].get(name, {}).get("result") == "DETECTED")
-        for name in _DIMENSIONS
+        for name in DIMENSIONS
     }
+    # Через какой разрез прошли именно успешные атаки — это и есть «где сломалось».
+    breach_counts = {name: sum(1 for t in successful if name in t["breach"]) for name in DIMENSIONS}
     return {
         "run_id": state.get("run_id", run_dir.name),
         "created_at": state.get("created_at", ""),
@@ -46,6 +47,8 @@ def _load_run(run_dir: Path) -> dict[str, Any] | None:
         "asr": asr(counts),
         "llamator": llamator_summary([{"dimensions": t["dimensions"]} for t in tests]),
         "dimension_counts": dimension_counts,
+        "breach_counts": breach_counts,
+        "success_count": len(successful),
         "valid_test_count": len(valid_tests),
     }
 
@@ -68,6 +71,7 @@ def _load_test(run_dir: Path, state: dict[str, Any], path: Path) -> dict[str, An
     return {
         "test_id": test_id,
         "verdict": verdict_of(evaluation),
+        "breach": breach_of(evaluation),
         "effect": evaluation.get("effect"),
         "dimensions": evaluation.get("dimensions", {}),
         "judge": evaluation.get("judge"),
@@ -106,9 +110,11 @@ _TEMPLATE = """<!doctype html>
 <style>
   :root {
     color-scheme: light;
-    --bg: #f7f7f8; --panel: #ffffff; --border: #e2e2e6; --text: #1c1c1f; --muted: #6b6b74;
-    --success: #c62828; --fail: #2e7d32; --inconclusive: #b8860b; --error: #6b6b74;
-    --accent: #3b5bdb;
+    --bg: #fbf7f7; --panel: #ffffff; --border: #ecd9dc; --text: #1a1214; --muted: #7c6a6d;
+    /* Красный — это сработавшая атака. Устоявший агент нейтрально-серый, чтобы взгляд цеплялся
+       только за то, что сломалось. */
+    --success: #c1121f; --fail: #4a4248; --inconclusive: #b07d00; --error: #9b9199;
+    --accent: #c1121f; --tint: #fdeef0; --track: #f4e6e8;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
@@ -118,8 +124,8 @@ _TEMPLATE = """<!doctype html>
   .layout { display: flex; height: calc(100vh - 61px); }
   nav { width: 300px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--panel); }
   nav .run { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
-  nav .run:hover { background: #f0f1f6; }
-  nav .run.active { background: #e8ecff; border-left: 3px solid var(--accent); }
+  nav .run:hover { background: var(--tint); }
+  nav .run.active { background: var(--tint); border-left: 3px solid var(--accent); }
   nav .run .id { font-weight: 600; font-size: 13px; word-break: break-all; }
   nav .run .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   main { flex: 1; overflow-y: auto; padding: 24px; }
@@ -131,20 +137,20 @@ _TEMPLATE = """<!doctype html>
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
   th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
   tbody tr { cursor: pointer; }
-  tbody tr:hover { background: #f0f1f6; }
+  tbody tr:hover { background: var(--tint); }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #fff; }
   .badge.SUCCESS { background: var(--success); }
   .badge.FAIL { background: var(--fail); }
   .badge.INCONCLUSIVE { background: var(--inconclusive); }
   .badge.ERROR, .badge.unknown { background: var(--error); }
   .chip { display: inline-block; padding: 1px 7px; margin: 0 4px 2px 0; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); }
-  .chip.DETECTED { background: #fdecea; border-color: #f2b8b5; }
-  .chip.NOT_DETECTED { background: #e8f5e9; border-color: #b6e0ba; }
-  .chip.INCONCLUSIVE { background: #fff8e1; border-color: #f0dca0; }
+  .chip.DETECTED { background: var(--tint); border-color: #f0b8bd; }
+  .chip.NOT_DETECTED { background: #f5f3f4; border-color: #e2dcde; }
+  .chip.INCONCLUSIVE { background: #fdf6e6; border-color: #f0dca0; }
   .detail { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: -1px; }
   .detail h3 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; color: var(--muted); }
   .detail h3:first-child { margin-top: 0; }
-  .detail pre { background: #f3f3f6; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 320px; }
+  .detail pre { background: #fbf7f8; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; max-height: 320px; }
   .steps { font-size: 12px; }
   .steps li { margin-bottom: 4px; }
   .empty { color: var(--muted); padding: 40px; text-align: center; }
@@ -154,10 +160,11 @@ _TEMPLATE = """<!doctype html>
   .chart-box h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
   .bar-row .label { width: 90px; flex-shrink: 0; color: var(--text); }
-  .bar-row .track { flex: 1; background: #eef0f6; border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-row .track { flex: 1; background: var(--track); border-radius: 4px; height: 8px; overflow: hidden; }
   .bar-row .fill { height: 100%; background: var(--accent); border-radius: 4px; }
   .bar-row .value { width: 60px; flex-shrink: 0; text-align: right; color: var(--muted); }
-  .caveat { font-size: 12px; color: var(--muted); background: #fff8e1; border: 1px solid #f0dca0; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .breach { font-size: 11px; color: var(--success); font-weight: 600; margin-top: 3px; }
+  .caveat { font-size: 12px; color: var(--muted); background: #fdf6e6; border: 1px solid #f0dca0; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -218,6 +225,7 @@ function selectRun(i) {
       <div class="card"><div class="n">${run.counts.ERROR}</div><div class="l">ERROR</div></div>
     </div>
     <div class="charts">
+      ${breachChart(run)}
       ${dimensionChart(run)}
       ${verdictChart(run)}
     </div>
@@ -240,9 +248,16 @@ function barRow(label, count, total) {
   return `<div class="bar-row"><div class="label">${label}</div><div class="track"><div class="fill" style="width:${width}%"></div></div><div class="value">${count} / ${total}</div></div>`;
 }
 
+function breachChart(run) {
+  const labels = {output:'финальный ответ', memory:'память', tool:'инструменты', cross_session:'другая сессия'};
+  if (!run.success_count) return `<div class="chart-box"><h4>Где сломалось</h4><div class="empty">Успешных атак нет</div></div>`;
+  const rows = Object.entries(run.breach_counts || {}).map(([n,c]) => barRow(labels[n]||n, c, run.success_count)).join('');
+  return `<div class="chart-box"><h4>Где сломалось (из ${run.success_count} успешных атак)</h4>${rows}</div>`;
+}
+
 function dimensionChart(run) {
   const rows = Object.entries(run.dimension_counts || {}).map(([name, count]) => barRow(name, count, run.valid_test_count)).join('');
-  return `<div class="chart-box"><h4>Сработало по разрезам (из валидных тестов)</h4>${rows || '<div class="empty">Нет данных</div>'}</div>`;
+  return `<div class="chart-box"><h4>Сигнал по разрезам (все валидные тесты)</h4>${rows || '<div class="empty">Нет данных</div>'}</div>`;
 }
 
 function verdictChart(run) {
@@ -252,9 +267,12 @@ function verdictChart(run) {
 }
 
 function renderRow(t, j) {
+  const labels = {output:'финальный ответ', memory:'память', tool:'инструменты', cross_session:'другая сессия'};
   const dims = Object.entries(t.dimensions || {})
     .map(([name, d]) => `<span class="chip ${d.result || 'INCONCLUSIVE'}">${name}: ${d.result || '?'}</span>`).join('');
-  return `<tr id="row-${j}"><td>${t.test_id}</td><td><span class="badge ${verdictClass(t.verdict)}">${t.verdict}</span></td><td>${dims}</td></tr>`;
+  const breach = t.verdict === 'SUCCESS'
+    ? `<div class="breach">сломалось: ${(t.breach || []).map(n => labels[n] || n).join(', ') || 'по трассе'}</div>` : '';
+  return `<tr id="row-${j}"><td>${t.test_id}${breach}</td><td><span class="badge ${verdictClass(t.verdict)}">${t.verdict}</span></td><td>${dims}</td></tr>`;
 }
 
 function renderDetail(t) {

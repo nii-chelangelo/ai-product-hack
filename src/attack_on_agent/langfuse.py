@@ -8,6 +8,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from loguru import logger
+
+
+_ATTEMPTS = 3
+
 
 class LangfuseError(RuntimeError):
     """Raised when Langfuse evidence cannot be retrieved."""
@@ -62,6 +67,24 @@ def get_session_io(config: dict[str, Any], from_start_time: str, session_id: str
 
 
 def _get_observations(config: dict[str, Any], from_start_time: str) -> list[dict[str, Any]]:
+    """Read observations, retrying transient failures.
+
+    Langfuse occasionally rejects or drops a request while it is ingesting; a single such blip
+    used to fail the whole test and drop it out of the ASR denominator, which is a worse outcome
+    than waiting a second and asking again.
+    """
+    for attempt in range(1, _ATTEMPTS + 1):
+        try:
+            return _observations_request(config, from_start_time)
+        except LangfuseError as error:
+            if attempt == _ATTEMPTS:
+                raise
+            logger.warning("Langfuse read failed ({}), retrying", error)
+            sleep(attempt)
+    raise AssertionError("unreachable")
+
+
+def _observations_request(config: dict[str, Any], from_start_time: str) -> list[dict[str, Any]]:
     public_key = _credential(config["langfuse"]["public_key_env"])
     secret_key = _credential(config["langfuse"]["secret_key_env"])
     query = urlencode(
