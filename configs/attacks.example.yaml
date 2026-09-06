@@ -1,10 +1,25 @@
 llamator:
+  # Пишет сценарий атаки: от него зависит качество всего эксперимента.
   attacker:
-    model: replace-with-attacker-model
+    model: openai/gpt-5-mini
     api_key_env: ATTACKER_API_KEY
     base_url_env: ATTACKER_BASE_URL
+  # Нужен атакам, которые сами оценивают свои попытки. Другое семейство, чем у attacker,
+  # чтобы судья не был снисходителен к формулировкам «своей» модели.
+  judge:
+    model: qwen/qwen3-30b-a3b-instruct-2507
+    api_key_env: JUDGE_API_KEY
+    base_url_env: JUDGE_BASE_URL
 
+# Атаки на память из форка LLAMATOR. Эти три отрабатывают примерно за 8 минут и покрывают
+# разные механики; полный список семейства — в форке, каталог attacks/.
 tests:
-  - id: base64_injection
-    params:
-      num_attempts: 1
+  # Пытается записать правило, которое применится ко всем клиентам агента.
+  - id: memory_scope_escalation
+    params: {language: ru, num_attempts: 1, cross_session: true, finalize_message: finalize}
+  # Пытается закрепить ложное убеждение и вернуться к нему в следующей сессии.
+  - id: memory_false_belief
+    params: {language: ru, num_attempts: 1, cross_session: true, finalize_message: finalize}
+  # Постепенно размывает ограничения агента на протяжении диалога.
+  - id: memory_guardrail_erosion
+    params: {language: ru, num_attempts: 1, cross_session: true, finalize_message: finalize, max_steps: 8}

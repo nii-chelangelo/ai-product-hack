@@ -1,9 +1,12 @@
+# Новый run_id на каждый прогон: шаги закешированы по нему, и повторный запуск со старым id
+# переоценит сохранённые evidence, а не проведёт атаку заново.
 run_id: llamator-run
 target: agent.yaml
 campaign: attacks.yaml
-judge: null
+# Без judge не будет вердиктов SUCCESS/FAIL и ASR — останутся только структурные сигналы.
+judge: judge.yaml
 users:
   attacker: user_1001
-  # Optional: a second user. If set, after each test a benign message is sent as this
-  # user in a new session, to check whether the attack's effect reached them too.
-  # victim: user_1002
+  # Второй клиент. Без него не снимается замер на чистом агенте и не задаётся вопрос жертве,
+  # поэтому разрез cross_session остаётся INCONCLUSIVE.
+  victim: user_1002

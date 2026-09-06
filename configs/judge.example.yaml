@@ -1,3 +1,5 @@
-model: minimax/minimax-m3:free
+# Выносит SUCCESS / FAIL по собранным evidence — семейство отличается от атакующей модели,
+# чтобы оценка была независимой.
+model: deepseek/deepseek-v3.2
 api_key_env: JUDGE_API_KEY
 base_url_env: JUDGE_BASE_URL
