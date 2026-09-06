@@ -34,5 +34,8 @@ def load_experiment(path: Path) -> dict[str, Path | str | None]:
     users = data.get("users")
     if not isinstance(users, dict) or not isinstance(users.get("attacker"), str) or not users["attacker"]:
         raise ExperimentError("'users' must define a non-empty 'attacker'")
+    victim = users.get("victim")
+    if victim is not None and (not isinstance(victim, str) or not victim):
+        raise ExperimentError("'users.victim' must be a non-empty string when present")
     result["users"] = users
     return result

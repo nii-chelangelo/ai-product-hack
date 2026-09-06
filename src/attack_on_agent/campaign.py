@@ -36,13 +36,21 @@ def _validate_llamator(campaign: dict[str, Any]) -> None:
     source = campaign.get("llamator")
     if not isinstance(source, dict):
         raise CampaignError("'llamator' must be a YAML mapping")
-    attacker = source.get("attacker")
-    if not isinstance(attacker, dict):
-        raise CampaignError("'llamator.attacker' must be a YAML mapping")
+    _validate_model(source, "attacker", required=True)
+    # Some LLAMATOR attacks score their own attempts and are skipped without a judge model.
+    _validate_model(source, "judge", required=False)
+
+
+def _validate_model(source: dict[str, Any], role: str, *, required: bool) -> None:
+    settings = source.get(role)
+    if settings is None and not required:
+        return
+    if not isinstance(settings, dict):
+        raise CampaignError(f"'llamator.{role}' must be a YAML mapping")
     for name in ("model", "api_key_env", "base_url_env"):
-        value = attacker.get(name)
+        value = settings.get(name)
         if not isinstance(value, str) or not value:
-            raise CampaignError(f"'llamator.attacker.{name}' must be a non-empty string")
+            raise CampaignError(f"'llamator.{role}.{name}' must be a non-empty string")
 
 
 def _validate_test(test: Any) -> None:

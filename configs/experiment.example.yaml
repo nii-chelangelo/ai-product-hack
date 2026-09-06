@@ -4,3 +4,6 @@ campaign: attacks.yaml
 judge: null
 users:
   attacker: user_1001
+  # Optional: a second user. If set, after each test a benign message is sent as this
+  # user in a new session, to check whether the attack's effect reached them too.
+  # victim: user_1002
