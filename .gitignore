@@ -13,11 +13,17 @@ dist/
 !.env.example
 
 # Local configuration and run artefacts
-configs/local.yaml
 configs/agent.yaml
 configs/attacks.yaml
 configs/experiment.yaml
 configs/judge.yaml
+configs/demo-attacks.yaml
+configs/demo-experiment.yaml
+
+# Локальный сценарий показа и его конфиги — не часть репозитория
+DEMO.md
+configs/demo-attacks.example.yaml
+configs/demo-experiment.example.yaml
 runs/
 reports/
 

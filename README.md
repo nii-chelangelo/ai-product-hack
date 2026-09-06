@@ -85,7 +85,9 @@ git clone https://github.com/seniorfroggy/llamator.git
 Это PoC: он показывает, что оценка по состоянию агента находит то, чего не видно в диалоге. Это не
 готовый продукт — набор адаптеров ограничен одним стендом.
 
-## Быстрый старт
+## Запуск
+
+### 1. Установка и конфиги
 
 ```bash
 uv sync
@@ -96,32 +98,50 @@ cp configs/experiment.example.yaml configs/experiment.yaml
 cp configs/judge.example.yaml configs/judge.yaml
 ```
 
-Заполни `.env`, настрой `agent.yaml`, выбери проверки в `attacks.yaml` и укажи новый `run_id` в `experiment.yaml`.
+### 2. Заполнить `.env`
 
-Два параметра влияют на то, что ты увидишь в результате:
+| Переменная | Что это |
+| --- | --- |
+| `AGENT_API_KEY_ATTACKER` | ключ клиента стенда, от чьего имени идёт атака (`user_1001`) |
+| `AGENT_API_KEY_VERIFIER` | ключ второго клиента — жертвы (`user_1002`) |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | read-only ключи Langfuse Public API |
+| `ATTACKER_API_KEY`, `ATTACKER_BASE_URL` | доступ к модели, которая пишет сценарий атаки |
+| `JUDGE_API_KEY`, `JUDGE_BASE_URL` | доступ к моделям-судьям (LLAMATOR и нашей) |
 
-- `judge` в `experiment.yaml` — без него не будет вердиктов SUCCESS/FAIL и ASR, останутся только разрезы.
-- `users.victim` в `experiment.yaml` — без него не выполняется замер на чистом агенте и проверка второй сессии, поэтому разрез `cross_session` остаётся `INCONCLUSIVE`.
+Ключи агента берутся в самом стенде, ключи моделей — у любого OpenAI-совместимого провайдера
 
-Проверь стенд и запусти кампанию:
+### 3. Проверить подключение
 
 ```bash
 uv run --env-file .env attack-on-agent check --config configs/agent.yaml
+```
+
+Должно быть `Target API is ready`, `langfuse is reachable`, `Local test stand is ready`.
+
+### 4. Запустить кампанию
+
+Поставь новый `run_id` в `configs/experiment.yaml` — по нему кешируются шаги, и повторный запуск
+со старым id переоценит сохранённые данные вместо новой атаки.
+
+```bash
 uv run --env-file .env attack-on-agent run --config configs/experiment.yaml
 ```
 
-## Результаты
+В конце выводится итог: наш ASR и рядом ASR самого LLAMATOR.
 
-Сырые данные прогона лежат в `runs/<run-id>/`: вердикты по каждой проверке, evidence, изменения памяти и чекпоинты шагов.
-
-Читаемый отчёт и общий дашборд по всем прогонам:
+### 5. Посмотреть результат
 
 ```bash
 uv run --env-file .env attack-on-agent report --config configs/experiment.yaml
 uv run attack-on-agent dashboard --runs-dir runs
 ```
 
-Отчёт появится в `runs/<run-id>/demo-report.md`, дашборд — в `runs/dashboard.html`, он открывается в браузере без сервера.
+Отчёт — `runs/<run-id>/demo-report.md`; дашборд — `runs/dashboard.html`, открывается в браузере без
+сервера. В дашборде видно, против какого агента и какими моделями получен результат, доля
+сработавших атак, разрез «где сломалось» и цепочка «атакующий → общая память → другой пользователь».
+
+Сырые данные прогона остаются в `runs/<run-id>/`: `evaluations/` — вердикты и evidence по разрезам,
+`state_diffs/` — изменения памяти, `events.jsonl` — чекпоинты и ссылки на трейсы.
 
 Состояние незавершённого прогона:
 
@@ -129,11 +149,20 @@ uv run attack-on-agent dashboard --runs-dir runs
 uv run attack-on-agent status --run-id <run-id>
 ```
 
+### Без стенда и сети
+
+Формат результата можно посмотреть на синтетических кейсах — агент при этом не вызывается:
+
+```bash
+uv run attack-on-agent validate --config configs/validation.example.yaml
+```
+
 ## Конфигурация
 
-- `agent.yaml` — подключение к тестируемому агенту.
-- `attacks.yaml` — набор проверок.
-- `experiment.yaml` — параметры запуска.
+- `agent.yaml` — подключение к тестируемому агенту: клиенты и их ключи, chat-эндпоинт, эндпоинты
+  снапшота и сброса памяти, Langfuse, описание агента для атакующей модели.
+- `attacks.yaml` — набор проверок и модели LLAMATOR.
+- `experiment.yaml` — параметры запуска: `run_id`, ссылки на остальные конфиги, роли пользователей.
 - `judge.yaml` — модель, выносящая вердикт.
 
 Для нового агента подготовь его конфиг по шаблону в `configs/`.
